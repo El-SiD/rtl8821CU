@@ -14,6 +14,7 @@ EXTRA_CFLAGS += -Wno-unused-parameter
 EXTRA_CFLAGS += -Wno-unused-function
 EXTRA_CFLAGS += -Wno-unused
 #EXTRA_CFLAGS += -Wno-uninitialized
+EXTRA_CFLAGS += -Wno-incompatible-pointer-types
 EXTRA_CFLAGS += -Wno-vla #fix for kernel>=5.0
 EXTRA_CFLAGS += -Wno-bool-operation 
 
@@ -51,7 +52,7 @@ CONFIG_SDIO_HCI = n
 CONFIG_GSPI_HCI = n
 ########################## Features ###########################
 CONFIG_MP_INCLUDED = y
-CONFIG_POWER_SAVING = y
+CONFIG_POWER_SAVING = n
 CONFIG_USB_AUTOSUSPEND = n
 CONFIG_HW_PWRP_DETECTION = n
 CONFIG_WIFI_TEST = n
@@ -64,6 +65,7 @@ CONFIG_TRAFFIC_PROTECT = n
 CONFIG_LOAD_PHY_PARA_FROM_FILE = y
 CONFIG_TXPWR_BY_RATE_EN = y
 CONFIG_TXPWR_LIMIT_EN = n
+CONFIG_CALIBRATE_TX_POWER_TO_MAX = y
 CONFIG_RTW_CHPLAN = 0xFF
 CONFIG_RTW_ADAPTIVITY_EN = disable
 CONFIG_RTW_ADAPTIVITY_MODE = normal
@@ -80,9 +82,13 @@ CONFIG_RTW_GRO = y
 CONFIG_RTW_NETIF_SG = y
 CONFIG_RTW_IPCAM_APPLICATION = n
 CONFIG_RTW_REPEATER_SON = n
-CONFIG_RTW_WIFI_HAL = n
+CONFIG_RTW_WIFI_HAL = y
+CONFIG_VHT_EXTRAS = y
+CONFIG_LED_CONTROL = y
+CONFIG_LED_ENABLE = y
 ########################## Debug ###########################
-CONFIG_RTW_DEBUG = y
+CONFIG_DISABLE_PHYDM_DEBUG_FUNCTION = y
+CONFIG_RTW_DEBUG = n
 # default log level is _DRV_INFO_ = 4,
 # please refer to "How_to_set_driver_debug_log_level.doc" to set the available level.
 CONFIG_RTW_LOG_LEVEL = 0
@@ -103,6 +109,7 @@ CONFIG_RTW_SDIO_PM_KEEP_POWER = y
 CONFIG_MP_VHT_HW_TX_MODE = n
 ###################### Platform Related #######################
 CONFIG_PLATFORM_I386_PC = y
+CONFIG_PLATFORM_ARM_RPI = n
 CONFIG_PLATFORM_ANDROID_X86 = n
 CONFIG_PLATFORM_ANDROID_INTEL_X86 = n
 CONFIG_PLATFORM_JB_X86 = n
@@ -1168,6 +1175,17 @@ EXTRA_CFLAGS += -DCONFIG_RTW_CFGVEDNOR_RSSIMONITOR
 EXTRA_CFLAGS += -DCONFIG_RTW_CFGVENDOR_WIFI_LOGGER
 endif
 
+ifeq ($(CONFIG_VHT_EXTRAS), y)
+EXTRA_CFLAGS += -DCONFIG_VHT_EXTRAS
+endif
+
+ifeq ($(CONFIG_LED_CONTROL), y)
+EXTRA_CFLAGS += -DCONFIG_LED_CONTROL
+ifeq ($(CONFIG_LED_ENABLE), y)
+EXTRA_CFLAGS += -DCONFIG_LED_ENABLE
+endif
+endif
+
 ifeq ($(CONFIG_MP_VHT_HW_TX_MODE), y)
 EXTRA_CFLAGS += -DCONFIG_MP_VHT_HW_TX_MODE
 ifeq ($(CONFIG_PLATFORM_I386_PC), y)
@@ -1188,6 +1206,10 @@ EXTRA_CFLAGS += -DCONFIG_RTW_DEBUG
 EXTRA_CFLAGS += -DRTW_LOG_LEVEL=$(CONFIG_RTW_LOG_LEVEL)
 endif
 
+ifeq ($(CONFIG_DISABLE_PHYDM_DEBUG_FUNCTION), y)
+EXTRA_CFLAGS += -DCONFIG_DISABLE_PHYDM_DEBUG_FUNCTION
+endif
+
 EXTRA_CFLAGS += -DDM_ODM_SUPPORT_TYPE=0x04
 
 ifeq ($(CONFIG_PLATFORM_I386_PC), y)
@@ -1196,11 +1218,22 @@ EXTRA_CFLAGS += -DCONFIG_IOCTL_CFG80211 -DRTW_USE_CFG80211_STA_EVENT
 SUBARCH := $(shell uname -m | sed -e s/i.86/i386/)
 ARCH ?= $(SUBARCH)
 CROSS_COMPILE ?=
-KVER  := $(shell uname -r)
-KSRC := /lib/modules/$(KVER)/build
+KVER ?= $(shell uname -r)
+KSRC ?= /lib/modules/$(KVER)/build
 MODDESTDIR := /lib/modules/$(KVER)/kernel/drivers/net/wireless/
 INSTALL_PREFIX :=
 STAGINGMODDIR := /lib/modules/$(KVER)/kernel/drivers/staging
+endif
+
+ifeq ($(CONFIG_PLATFORM_ARM_RPI), y)
+EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN
+EXTRA_CFLAGS += -DCONFIG_IOCTL_CFG80211 -DRTW_USE_CFG80211_STA_EVENT
+ARCH ?= arm
+CROSS_COMPILE ?=
+KVER ?= $(shell uname -r)
+KSRC ?= /lib/modules/$(KVER)/build
+MODDESTDIR := /lib/modules/$(KVER)/kernel/drivers/net/wireless/
+INSTALL_PREFIX :=
 endif
 
 ifeq ($(CONFIG_PLATFORM_NV_TK1), y)
@@ -2005,7 +2038,7 @@ ARCH := arm
 CROSS_COMPILE := /home/android_sdk/Telechips/v13.05_r1-tcc-android-4.2.2_tcc893x-evm_build/prebuilts/gcc/linux-x86/arm/arm-eabi-4.6/bin/arm-eabi-
 KSRC := /home/android_sdk/Telechips/v13.05_r1-tcc-android-4.2.2_tcc893x-evm_build/kernel
 MODULE_NAME := wlan
-endif 
+endif
 
 ifeq ($(CONFIG_PLATFORM_RTL8197D), y)
 EXTRA_CFLAGS += -DCONFIG_BIG_ENDIAN -DCONFIG_PLATFORM_RTL8197D
@@ -2237,17 +2270,18 @@ config_r:
 
 clean:
 	#$(MAKE) -C $(KSRC) M=$(shell pwd) clean
-	cd hal ; rm -fr */*/*/*.mod.c */*/*/*.mod */*/*/*.o */*/*/.*.cmd */*/*/*.ko
-	cd hal ; rm -fr */*/*.mod.c */*/*.mod */*/*.o */*/.*.cmd */*/*.ko
-	cd hal ; rm -fr */*.mod.c */*.mod */*.o */.*.cmd */*.ko
-	cd hal ; rm -fr *.mod.c *.mod *.o .*.cmd *.ko
-	cd core ; rm -fr */*.mod.c */*.mod */*.o */.*.cmd */*.ko
-	cd core ; rm -fr *.mod.c *.mod *.o .*.cmd *.ko
-	cd os_dep/linux ; rm -fr *.mod.c *.mod *.o .*.cmd *.ko
-	cd os_dep ; rm -fr *.mod.c *.mod *.o .*.cmd *.ko
-	cd platform ; rm -fr *.mod.c *.mod *.o .*.cmd *.ko
+	cd hal ; rm -fr */*/*/*.mod.c */*/*/*.mod */*/*/*.o */*/*/*.o.* */*/*/.*.cmd */*/*/*.ko
+	cd hal ; rm -fr */*/*.mod.c */*/*.mod */*/*.o */*/*.o.* */*/.*.cmd */*/*.ko
+	cd hal ; rm -fr */*.mod.c */*.mod */*.o */*.o.* */.*.cmd */*.ko
+	cd hal ; rm -fr *.mod.c *.mod *.o *.o.* .*.cmd *.ko
+	cd core/efuse ; rm -fr *.mod.c *.mod *.o *.o.* .*.cmd *.ko
+	cd core ; rm -fr *.mod.c *.mod *.o *.o.* .*.cmd *.ko
+	cd os_dep/linux ; rm -fr *.mod.c *.mod *.o *.o.* .*.cmd *.ko
+	cd os_dep ; rm -fr *.mod.c *.mod *.o *.o.* .*.cmd *.ko
+	cd platform ; rm -fr *.mod.c *.mod *.o *.o.* .*.cmd *.ko
 	rm -fr Module.symvers ; rm -fr Module.markers ; rm -fr modules.order
-	rm -fr *.mod.c *.mod *.o .*.cmd *.ko *~
+	rm -fr *.mod.c *.mod *.o *.o.* .*.cmd *.ko *~
 	rm -fr .tmp_versions
+	rm -fr .cache.mk
 endif
 
